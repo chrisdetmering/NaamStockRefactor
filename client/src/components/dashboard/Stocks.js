@@ -61,10 +61,15 @@ const Stocks = () => {
     const userid = user.id;
     const response = await fetch(`/api/position/${userid}/${selectedStock}`);
     const data = await response.json();
+    if (data.msg) {
+      return 0;
+    }
+
     return data;
   };
 
   const handleOrderSubmit = async (type) => {
+    console.log(type)
 
     try {
       const data = {
@@ -87,6 +92,7 @@ const Stocks = () => {
       const orderData = await response.json();
 
       if (!response.ok) {
+        console.log('error')
         setOrderMsg(orderData);
       } else {
         setOrderMsg(orderData);
