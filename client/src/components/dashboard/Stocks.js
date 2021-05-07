@@ -7,33 +7,112 @@ import { Link, useParams, useLocation } from 'react-router-dom';
 import { formatNumber } from '../../utils/function';
 import { Card, Alert } from 'react-bootstrap';
 import useQuery from '../../utils/Hooks/UseQuery';
+import { useAuth } from '../../context/AuthContext';
 
 const Stocks = () => {
   const [stock, setStock] = useState('');
   const [chart, setChart] = useState([]);
   const [company, setCompany] = useState('');
   const query = useQuery();
+  const { user } = useAuth();
   const [selectedStock, setSelectedStock] = useState(query.get('stock'));
   const [orderMsg, setOrderMsg] = useState('');
+  const [purchaseDetails, setPurchseDetails] = useState({});
+  const [quantity, setQuantity] = useState(0);
+  const [total, setTotal] = useState(0);
+
+
+  useEffect(async () => {
+    const stock = await fetchStock();
+    const wallet = await getCashBalance();
+    const position = await getPosition();
+
+    setStock(stock.quoteData);
+    setChart(stock.chartData);
+    setCompany(stock.companyData);
+
+    const details = {
+      stockSymbol: stock.companyData.symbol,
+      stockPrice: stock.quoteData.quote.latestPrice,
+      wallet: wallet.cashAvailableToTrade,
+      position
+    }
+
+    setPurchseDetails(details);
+  }, []);
+
 
   const fetchStock = async () => {
     const stockId = query.get('stock');
     const response = await fetch(`/api/stocks/search/${stockId}`);
     const data = await response.json();
-
-    setStock(data.quoteData);
-    setChart(data.chartData);
-    setCompany(data.companyData);
+    return data;
   };
 
-  useEffect(() => {
-    fetchStock();
-  }, []);
 
-  useEffect(() => {
-    if (!selectedStock) return;
-    fetchStock();
-  }, [selectedStock]);
+  const getCashBalance = async () => {
+    const userid = user.id;
+    const response = await fetch(`/api/cashBalance/${userid}`);
+    const data = await response.json();
+    return data;
+  };
+
+  const getPosition = async () => {
+    const userid = user.id;
+    const response = await fetch(`/api/position/${userid}/${selectedStock}`);
+    const data = await response.json();
+    return data;
+  };
+
+  const handleOrderSubmit = async (type) => {
+
+    try {
+      const data = {
+        symbol: purchaseDetails.stockSymbol,
+        type,
+        quantity: quantity,
+        price: purchaseDetails.stockPrice,
+        userid: user.id,
+      };
+
+      const config = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      };
+
+      const response = await fetch('/api/orders', config);
+      const orderData = await response.json();
+
+      if (!response.ok) {
+        setOrderMsg(orderData);
+      } else {
+        setOrderMsg(orderData);
+        setQuantity('');
+        setTotal(0);
+        const wallet = await getCashBalance();
+        const position = await getPosition();
+
+        const details = {
+          stockSymbol: purchaseDetails.stockSymbol,
+          stockPrice: purchaseDetails.stockPrice,
+          wallet: wallet.cashAvailableToTrade,
+          position
+        }
+
+        setPurchseDetails(details);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const handleQuantityChange = (quantity) => {
+    setQuantity(quantity);
+    setTotal(quantity * purchaseDetails.stockPrice);
+  }
 
   const displayChart = chart ? (
     <Chart
@@ -90,6 +169,11 @@ const Stocks = () => {
         <div className='right-container'>
           <Card className=''>
             <ControlledTabs
+              details={purchaseDetails}
+              quantity={quantity}
+              total={total}
+              handleQuantityChange={handleQuantityChange}
+              handleSubmit={handleOrderSubmit}
               currentPrice={stock ? stock.quote.latestPrice : null}
               setOrderMsg={setOrderMsg}
             />
